@@ -89,7 +89,7 @@ import java.util.UUID;
 
 
 //Android的异步消息处理主要由4个部分组成：Message，Handler，MessageQueue，Looper。
-//Message：它在线程之间传递消息，可以在内部携带少量的信息，用于在不同线程之间交换数据。
+//Message：它在线程之间传递消息，可以在内部携带少量的信息（3个int，1个obj），用于在不同线程之间交换数据。
 //Handler：它主要用于发送和处理消息。发送消息是使用sendMessage()方法，处理消息是使用handlerMessage()方法。
 //MessageQueue：它主要用于存放所有通过Handler发送的消息。每个线程中只会有一个MessageQueue对象。
 //Looper：它是每个线程中MessageQueue的管家。当调用Looper的loop()方法后，就会进入到一个无限循环当中，
@@ -203,17 +203,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //初始化View
         initView();
 
+//JAVA代码中经常看到对一个对象的连续.操作
+//实际上这种操作并非JAVA特有的操作，能否连续进行调用，还需要看该方法的返回值，
+//如果返回对象自身(例如 return this;)或者新的对象就可以进行相应的操作。
+
         //先获取本应用的实例，然后用它作为参数传入，这样BleManager内部就可以保存好本程序实例
         //然后在BleManager内部调用一些方法，必须用到“本程序实例”，例如：context.getSystemService(Context.BLUETOOTH_SERVICE)
         //初始化BleManager
+//无论调用BleManager.getInstance()多少次，都只会产生一个BleManager实例
         BleManager.getInstance().init(getApplication());
 
         //设置BLE的连接参数
         BleManager.getInstance()
                 .enableLog(true)            //Log功能=使能
-                .setReConnectCount(1, 5000)//重连次数=1，重连时间间隔=5000ms
-                .setConnectOverTime(20000)  //
-                .setOperateTimeout(5000);   //操作超时=5000ms
+                .setReConnectCount(1, 5000)//重连次数=1，重连时间间隔（单位毫秒）=5000ms
+                .setSplitWriteNum(20)   //设置分包发送的每包字节数上限
+                .setConnectOverTime(20000)  //连接超时（单位毫秒）=20s
+                .setOperateTimeout(5000);   //设置readRssi、setMtu、write、read、notify、indicate的超时时间（单位毫秒）。操作超时=5s
 
         //判断本设备是否支持BLE
         if(BleManager.getInstance().isSupportBle()) {
@@ -342,10 +348,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
             //取出Message内携带的数据
+            int what = msg.what;
             int arg1 = msg.arg1;
+            int arg2 = msg.arg2; //此处Message内的数据未用到
             String info= (String) msg.obj;
             //通过what来判断是哪个线程发来的消息，然后进行相应处理
-            if (msg.what==1){
+            if (what==1){
                 //在文本框中显示“计时=x”
                 txt_timer.setText(info+arg1);
             }
@@ -602,10 +610,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mDeviceAdapter.notifyDataSetChanged();
     }
 
+//标准的UUID格式为：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12)=32*4位=128位=16字节;
+//因为Java数量类型为long=64位=8字节，所以UUID类型对象内包含了mostSigBits(8字节)，leastSigBits(8字节)
     //设置扫描规则
     private void setScanRule() {
         String[] uuids;
         //获取用户输入的UUID字符串。若未输入，则为null；若有输入，则用,来分割为String数组
+        //输入格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
         String str_uuid = et_uuid.getText().toString();
         if (TextUtils.isEmpty(str_uuid)) {
             uuids = null;
@@ -617,7 +628,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (uuids != null && uuids.length > 0) {
             //用户输入的 可用,分割的UUID有几组，就创建相应大小的UUID类型的数组
             serviceUuids = new UUID[uuids.length];
-            //依次检查每个用,分割出来的UUID是否合格
+            //依次检查每个用,分割出来的UUID是否合格(即用"-"分隔的5段数据)
             for (int i = 0; i < uuids.length; i++) {
                 //先获取一个UUID，然后用"-"来分割
                 String name = uuids[i];
@@ -635,6 +646,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         String[] names;
         //获取用户输入的设备名称。若未输入，则为null；若有输入，则用,来分割为String数组
+        //输入格式：xxx,yyy,zzz
         String str_name = et_name.getText().toString();
         if (TextUtils.isEmpty(str_name)) {
             names = null;
@@ -653,7 +665,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         scanRuleConfig = new BleScanRuleConfig.Builder()
                 .setServiceUuids(serviceUuids)      // 只扫描指定的服务的设备，可选
                 .setDeviceName(true, names)   // 只扫描指定广播名的设备，可选
-                .setDeviceMac(mac)                  // 只扫描指定mac的设备，可选
+                .setDeviceMac(mac)                  // 只扫描指定MAC的设备，可选
                 .setAutoConnect(isAutoConnect)      // 连接时的autoConnect参数，可选，默认false
                 .setScanTimeOut(10000)              // 扫描超时时间，可选，默认10秒
                 .build();
@@ -663,7 +675,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     //启动扫描
     private void startScan() {
-        //在此设置扫描时间
+        //在此设置扫描时间（单位ms）
         scanRuleConfig.setScanTimeOut(5000);
         //启动扫描，因为无法立刻完成扫描，所以需要注册并实现具体的回调函数
         //此处的BleScanCallback是一个回调接口，它包含了4个回调的钩子
@@ -772,18 +784,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //因此需要在此处具体实现这4个回调函数的功能
         BleManager.getInstance().connect(bleDevice, new BleGattCallback() {
             //当开始连接时，进行回调
-            //显示进度条progressDialog
             @Override
             public void onStartConnect() {
+                //记录开始连接的当前时间
                 ConnectStartedTime = System.currentTimeMillis();
+                //显示进度条progressDialog
                 progressDialog.show();
             }
 
             //当连接失败时，进行回调
             @Override
             public void onConnectFail(BleDevice bleDevice, BleException exception) {
+                //停止连接动画
                 img_loading.clearAnimation();
+                //令连接图像消失
                 img_loading.setVisibility(View.INVISIBLE);
+                //令按键显示“开始扫描”
                 btn_scan.setText(getString(R.string.start_scan));
                 //销毁进度条progressDialog
                 progressDialog.dismiss();
@@ -794,6 +810,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
             @Override
             public void onConnectSuccess(BleDevice bleDevice, BluetoothGatt gatt, int status) {
+                //记录连接成功的当前时间
                 DeviceConnectedTime = System.currentTimeMillis();
                 //销毁进度条progressDialog
                 progressDialog.dismiss();
@@ -802,12 +819,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 //通知所有观察者(即向所有订阅者发布)，数据已发生变化，即刷新UI
                 mDeviceAdapter.notifyDataSetChanged();
 
+                //当连接成功后，可以修改当前已连接设备的MTU值
                 setMtu(bleDevice, 247);
 //-----------------------------------------------------------------------------------------
 //通过下述一些方法，获得已连接设备的内部服务及特征值等信息，并启动新AdvDataActivity来显示这些数据
                 String str = "";
                 str += "Scan_Time = " + (DeviceScanedTime-ScanStartedTime) +"ms\n";
                 str += "Connect_Time = " + (DeviceConnectedTime-ConnectStartedTime) +"ms\n";
+                //遍历当前已连接设备的gatt中所有的服务，将他们逐个打印输出
                 for(int i=0; i<gatt.getServices().size(); i++){
                     str += "\n服务"+i+"\n"
                             //获得指定服务的UUID
@@ -815,9 +834,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             //获得指定服务的类型
                             +"\nType="+ gatt.getServices().get(i).getType();
                 }
+                //遍历当前已连接设备的gatt中的第三个服务(即自定义的0xFFF0)内的所有特征，将他们逐个打印输出
                 for(int i=0; i<gatt.getServices().get(3).getCharacteristics().size(); i++){
                     //获得指定服务下指定特征值的属性
                     int charaProp = gatt.getServices().get(3).getCharacteristics().get(i).getProperties();
+                    //将属性值转换为对应的文字内容
                     String property = "";
                     //若属性中包含有READ，则添加“Read, ”
                     if ((charaProp & BluetoothGattCharacteristic.PROPERTY_READ) > 0) {
@@ -847,11 +868,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     str += "\n特征"+i+"\n"
                             +gatt.getServices().get(3).getCharacteristics().get(i).getUuid().toString()
                             +"\n属性="+ property;
+                    str += "\n描述符="+gatt.getServices().get(3).getCharacteristics().get(i).getDescriptors().toString();
                 }
 
-
+                //创建一个Intent类对象intent
+                //入口参数1（启动活动的上下文）= MainActivity.this
+                //入口参数2（想要启动的Activity）= AdvDataActivity.class
                 Intent intent = new Intent(MainActivity.this, AdvDataActivity.class);
+                //向intent中存入一个键值对(类似JSON)：键=extra_data，值=str(即扫描结果的汇总)
                 intent.putExtra("extra_data", str);
+                //用预先设置好的intent来启动一个Activity
                 startActivity(intent);
             }
 
@@ -917,7 +943,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onMtuChanged(int mtu) {
                 Log.i(TAG, "onMtuChanged: " + mtu);
-                Toast.makeText(MainActivity.this, "设置MTU成功！", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "设置MTU成功！MTU="+mtu, Toast.LENGTH_LONG).show();
             }
         });
     }

@@ -26,6 +26,7 @@
     <string name="console">操作控制台</string>
     <string name="name">设备广播名：</string>
     <string name="mac">MAC:</string>
+    <string name="bond">绑定:</string>
     <string name="service">服务</string>
     <string name="type">服务类型(主服务)</string>
     <string name="scan_setting">在下面你可以配置需要扫描的设备的条件，可以为空</string>

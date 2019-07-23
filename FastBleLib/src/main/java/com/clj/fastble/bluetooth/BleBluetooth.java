@@ -105,6 +105,11 @@ public class BleBluetooth {
             bleReadCallbackHashMap.remove(uuid);
     }
 
+    //清除4类回调用的HashMap的内容
+    //bleNotifyCallbackHashMap
+    //bleIndicateCallbackHashMap
+    //bleWriteCallbackHashMap
+    //bleReadCallbackHashMap
     public synchronized void clearCharacterCallback() {
         if (bleNotifyCallbackHashMap != null)
             bleNotifyCallbackHashMap.clear();

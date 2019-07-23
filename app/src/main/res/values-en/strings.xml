@@ -26,6 +26,7 @@
     <string name="console">Console</string>
     <string name="name">Device broadcast name：</string>
     <string name="mac">MAC:</string>
+    <string name="bond">Bond:</string>
     <string name="service">Service</string>
     <string name="type">Service type (main service)</string>
     <string name="scan_setting">Below, you can configure the conditions that you need to scan the device, which can be empty</string>

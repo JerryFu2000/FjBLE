@@ -40,11 +40,15 @@ public class OperationActivity extends AppCompatActivity implements Observer {
     private List<Fragment> fragments = new ArrayList<>();
     private int currentPage = 0;
     private String[] titles = new String[3];
+    //3个字符串如下：
+    //  服务列表
+    //  特征列表
+    //  操作控制台
 
 
     //成员方法(即类的多个对象的共享方法)
     //继承自父类的方法：2.与父类方法名、参数都相同，但内部语句不同，就是重写Override
-    //当本Activity创建时
+    //当本Activity创建时，进行回调
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,44 +58,59 @@ public class OperationActivity extends AppCompatActivity implements Observer {
         initData();
         //初始化View
         initView();
-
+        //初始化3个Fragment页面，并切换到Fragment页面0（即第一个Fragment页面：ServiceListFragment）
         initPage();
-
         //把本Activity加入到观察者(订阅者)队列中
         ObserverManager.getInstance().addObserver(this);
     }
 
-    //当本Activity销毁时
+    //当本Activity销毁时，进行回调
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        //清除指定的bleDevice的4类回调用的HashMap的内容
+        //bleNotifyCallbackHashMap
+        //bleIndicateCallbackHashMap
+        //bleWriteCallbackHashMap
+        //bleReadCallbackHashMap
         BleManager.getInstance().clearCharacterCallback(bleDevice);
         //把本Activity移除出观察者(订阅者)队列
         ObserverManager.getInstance().deleteObserver(this);
     }
 
+    //当断开连接时，进行回调
     //因为要实现Observer接口，所以需要实现接口中的disConnected()方法
     //即作为观察者(订阅者)，当收到被观察者(发布者)发来的通知后，相应的处理
     @Override
     public void disConnected(BleDevice device) {
         if (device != null && bleDevice != null && device.getKey().equals(bleDevice.getKey())) {
+            //结束本Activity
             finish();
         }
     }
 
+    //当按下Android系统的按键时，进行回调
+    //参数1 --- 被按下的按键的键码值
+    //参数2 ---
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        //若是按下“后退”键，则将Fragment后退一页
+        //若是按下“后退”键
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            //若当前页面号!=0，说明还不是第一个页面，因此可以后退一页
             if (currentPage != 0) {
                 currentPage--;
                 changePage(currentPage);
+                //因为我们代替系统处理了我们想处理的系统按键，不希望再被其他方法处理，所以提前返回true
                 return true;
-            } else {
+            }
+            //若当前页面号==0，说明已是第一个页面，因此结束本Activity
+            else {
                 finish();
+                //因为我们代替系统处理了我们想处理的系统按键，不希望再被其他方法处理，所以提前返回true
                 return true;
             }
         }
+        //执行到此处，说明按下的系统按键都不是我们希望的，所以将这些按键按下的处理交还给系统自己处理，并且return
         return super.onKeyDown(keyCode, event);
     }
 
@@ -99,18 +118,27 @@ public class OperationActivity extends AppCompatActivity implements Observer {
     private void initView() {
         //引入Toolbar
         toolbar = (Toolbar) findViewById(R.id.toolbar);
-        //为此Toolbar设置标题
+        //为此Toolbar设置标题，先设置为第一个字符串
+        //3个字符串如下：
+        //  服务列表
+        //  特征列表
+        //  操作控制台
         toolbar.setTitle(titles[0]);
+        //令自定义的Toolbar类控件toolbar来替代标准的ActionBar控件
         setSupportActionBar(toolbar);
+        //允许在左上角图标的左边加上一个返回的图标
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         //设置Toolbar的后退键的作用：令页面后退一页
         toolbar.setNavigationOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                //若当前页面号!=0，说明还不是第一个页面，因此可以后退一页
                 if (currentPage != 0) {
                     currentPage--;
                     changePage(currentPage);
-                } else {
+                }
+                //若当前页面号==0，说明已是第一个页面，因此结束本Activity
+                else {
                     finish();
                 }
             }
@@ -124,6 +152,7 @@ public class OperationActivity extends AppCompatActivity implements Observer {
         //键=KEY_DATA
         //值=bleDevice(即当前已连接的设备)
         bleDevice = getIntent().getParcelableExtra(KEY_DATA);
+        //若传递进来的bleDevice为null，说明当前没有连接到BLE设备，或出错，则结束本Activity
         if (bleDevice == null)
             finish();
 
@@ -135,12 +164,17 @@ public class OperationActivity extends AppCompatActivity implements Observer {
                 getString(R.string.console)};
     }
 
+    //初始化3个Fragment页面，并切换到Fragment页面0（即第一个Fragment页面：ServiceListFragment）
     private void initPage() {
+        //准备Fragment
+        //依次创建3个不同用途的Fragment类型的对象，然后添加到List<Fragment>中
+        //向getSupportFragmentManager().beginTransaction()依次添加List中的3个Fragment，隐藏，然后commit
         prepareFragment();
+        //切换到Fragment页面0（即第一个Fragment页面：ServiceListFragment）
         changePage(0);
     }
 
-    //切换
+    //切换Fragment页面
     public void changePage(int page) {
         //令currentPage=入口传入的page号
         currentPage = page;
@@ -148,16 +182,18 @@ public class OperationActivity extends AppCompatActivity implements Observer {
         toolbar.setTitle(titles[page]);
         //根据入口传入的page号来显示期望的Fragment
         updateFragment(page);
-        //
+        //若是第二个Fragment页面，从页面List中取出相应的页面对象，然后showData相应数据
         if (currentPage == 1) {
             ((CharacteristicListFragment) fragments.get(1)).showData();
-        } else if (currentPage == 2) {
+        }
+        //若是第三个Fragment页面，从页面List中取出相应的页面对象，然后showData相应数据
+        else if (currentPage == 2) {
             ((CharacteristicOperationFragment) fragments.get(2)).showData();
         }
     }
 
     //准备Fragment
-    //依次创建3个不同用途的Fragment类型的对象，然后添加到List中
+    //依次创建3个不同用途的Fragment类型的对象，然后添加到List<Fragment>中
     //向getSupportFragmentManager().beginTransaction()依次添加List中的3个Fragment，隐藏，然后commit
     private void prepareFragment() {
         fragments.add(new ServiceListFragment());

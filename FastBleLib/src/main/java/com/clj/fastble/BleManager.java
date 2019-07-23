@@ -64,15 +64,20 @@ public class BleManager {
     private int splitWriteNum = DEFAULT_WRITE_DATA_SPLIT_COUNT;
     private long connectOverTime = DEFAULT_CONNECT_OVER_TIME;
 
+    //类方法static(即类加载后，无需创建对象，就可以被调用的方法)
     public static BleManager getInstance() {
         return BleManagerHolder.sBleManager;
     }
 
+    //私有的静态内部类（不需要实例化，就能用）
     private static class BleManagerHolder {
+        //类常量static final(即类的多个对象的共享常量)
+        //无论调用多少次，都只会是第一次new出的BleManager实例
         private static final BleManager sBleManager = new BleManager();
     }
 
     //初始化
+    //入口传入调用本函数的实例对象，然后暂存到context
     public void init(Application app) {
         //
         if (context == null && app != null) {
@@ -85,7 +90,8 @@ public class BleManager {
             }
             //获得当前设备的BluetoothAdapter实例，只有它能实现扫描，连接等具体功能
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-            //创建MultipleBluetoothController类对象，用于对多个连接的Ble设备进行管理
+            //创建MultipleBluetoothController类对象，用于对多个连接的Ble设备进行管理（1主对多从）
+            //因此可以称之为“多个从机BLE控制器”
             multipleBluetoothController = new MultipleBluetoothController();
             //创建扫描规则类对象，后续用于存放具体的扫描规则
             bleScanRuleConfig = new BleScanRuleConfig();
@@ -300,7 +306,7 @@ public class BleManager {
             throw new IllegalArgumentException("BleScanCallback can not be Null!");
         }
 
-        //若蓝牙没有使能，则log输出，并回调
+        //若蓝牙没有使能，则log输出，并回调报错
         if (!isBlueEnable()) {
             BleLog.e("Bluetooth not enable!");
             callback.onScanStarted(false);
@@ -314,6 +320,13 @@ public class BleManager {
         boolean fuzzy = bleScanRuleConfig.isFuzzy();
         long timeOut = bleScanRuleConfig.getScanTimeOut();
 
+        //启动扫描
+        //参数1 --- 用户预置的服务UUID
+        //参数2 --- 用户预置的设备名称
+        //参数3 --- 用户预置的MAC地址
+        //参数4 --- 用户预置的Fuzzy
+        //参数5 --- 用户预置的扫描时间
+        //参数6 --- 一个BleScanCallback类的实例（即回调函数）
         BleScanner.getInstance().scan(serviceUuids, deviceNames, deviceMac, fuzzy, timeOut, callback);
     }
 
@@ -602,14 +615,14 @@ public class BleManager {
     /**
      * write
      *
-     * @param bleDevice
-     * @param uuid_service
-     * @param uuid_write
-     * @param data
-     * @param split
+     * @param bleDevice --- 指定的bleDevice
+     * @param uuid_service --- 指定的服务的UUID
+     * @param uuid_write --- 指定的特征的UUID
+     * @param data --- 指定的待写入的字节数组
+     * @param split --- TRUE=使能分包发送； FALSE=禁止分包发送
      * @param sendNextWhenLastSuccess
-     * @param intervalBetweenTwoPackage
-     * @param callback
+     * @param intervalBetweenTwoPackage --- 分包发送时的间隔
+     * @param callback --- 写操作的回调
      */
     public void write(BleDevice bleDevice,
                       String uuid_service,
@@ -620,28 +633,37 @@ public class BleManager {
                       long intervalBetweenTwoPackage,
                       BleWriteCallback callback) {
 
+        //若没有预置callback，则抛出异常
         if (callback == null) {
             throw new IllegalArgumentException("BleWriteCallback can not be Null!");
         }
-
+        //若待发送数据为null，则抛出异常
         if (data == null) {
             BleLog.e("data is Null!");
             callback.onWriteFailure(new OtherException("data is Null!"));
             return;
         }
-
+        //若待发送数据大于20字节，且没有使能分包，则Log提示
         if (data.length > 20 && !split) {
             BleLog.w("Be careful: data's length beyond 20! Ensure MTU higher than 23, or use spilt write!");
         }
 
+        //在“多个从机BLE控制器”中选择指定的已连接BLE设备
         BleBluetooth bleBluetooth = multipleBluetoothController.getBleBluetooth(bleDevice);
+        //若该设备不存在，说明未连接到指定BLE设备，就回调报错
         if (bleBluetooth == null) {
             callback.onWriteFailure(new OtherException("This device not connect!"));
-        } else {
+        }
+        //若设备存在
+        else {
+            //若使能分包，且待发送数据字节数>设定的每包数据上限值，则进行分包发送
             if (split && data.length > getSplitWriteNum()) {
                 new SplitWriter().splitWrite(bleBluetooth, uuid_service, uuid_write, data,
                         sendNextWhenLastSuccess, intervalBetweenTwoPackage, callback);
             } else {
+                //创建一个BleConnector对象
+                //在已连设备的GATT中找到指定的服务及特征
+                //
                 bleBluetooth.newBleConnector()
                         .withUUIDString(uuid_service, uuid_write)
                         .writeCharacteristic(data, callback, uuid_write);
@@ -652,23 +674,27 @@ public class BleManager {
     /**
      * read
      *
-     * @param bleDevice
-     * @param uuid_service
-     * @param uuid_read
-     * @param callback
+     * @param bleDevice --- 已连接的BLE设备
+     * @param uuid_service --- 指定的服务UUID
+     * @param uuid_read --- 指定的特征UUID
+     * @param callback --- 读操作的回调
      */
     public void read(BleDevice bleDevice,
                      String uuid_service,
                      String uuid_read,
                      BleReadCallback callback) {
+        //若未传入回调，则抛出异常
         if (callback == null) {
             throw new IllegalArgumentException("BleReadCallback can not be Null!");
         }
-
+        //在多路BLE控制器中找到入口指定的BLE设备
         BleBluetooth bleBluetooth = multipleBluetoothController.getBleBluetooth(bleDevice);
+        //若指定的BLE设备不存在，则回调报错
         if (bleBluetooth == null) {
             callback.onReadFailure(new OtherException("This device is not connected!"));
-        } else {
+        }
+        //若指定的BLE设备存在，则
+        else {
             bleBluetooth.newBleConnector()
                     .withUUIDString(uuid_service, uuid_read)
                     .readCharacteristic(callback, uuid_read);
@@ -877,6 +903,11 @@ public class BleManager {
             bleBluetooth.removeReadCallback(uuid_read);
     }
 
+    //清除指定的bleDevice的4类回调用的HashMap的内容
+    //bleNotifyCallbackHashMap
+    //bleIndicateCallbackHashMap
+    //bleWriteCallbackHashMap
+    //bleReadCallbackHashMap
     public void clearCharacterCallback(BleDevice bleDevice) {
         BleBluetooth bleBluetooth = getBleBluetooth(bleDevice);
         if (bleBluetooth != null)

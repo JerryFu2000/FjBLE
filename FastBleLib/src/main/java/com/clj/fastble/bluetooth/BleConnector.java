@@ -114,6 +114,7 @@ public class BleConnector {
                         break;
                     }
 
+                    //收到此消息，表示已从开始写特征开始，发生了超时(5s)，所以回调报错
                     case BleMsg.MSG_CHA_WRITE_START: {
                         BleWriteCallback writeCallback = (BleWriteCallback) msg.obj;
                         if (writeCallback != null) {
@@ -139,6 +140,7 @@ public class BleConnector {
                         break;
                     }
 
+                    //收到此消息，表示已从开始读特征开始，发生了超时(5s)，所以回调报错
                     case BleMsg.MSG_CHA_READ_START: {
                         BleReadCallback readCallback = (BleReadCallback) msg.obj;
                         if (readCallback != null)
@@ -216,6 +218,7 @@ public class BleConnector {
 
     }
 
+    //根据入口传入的UUID，在已连设备的GATT中找到对应的服务及特征
     private BleConnector withUUID(UUID serviceUUID, UUID characteristicUUID) {
         if (serviceUUID != null && mBluetoothGatt != null) {
             mGattService = mBluetoothGatt.getService(serviceUUID);
@@ -395,22 +398,27 @@ public class BleConnector {
      * write
      */
     public void writeCharacteristic(byte[] data, BleWriteCallback bleWriteCallback, String uuid_write) {
+        //若待写的数据为空 或 数据字节数<=0，则回调报错
         if (data == null || data.length <= 0) {
             if (bleWriteCallback != null)
                 bleWriteCallback.onWriteFailure(new OtherException("the data to be written is empty"));
             return;
         }
-
+        //若待写入的特征为空 或 此特征的权限不是“允许写”or“允许写，不需要应答”，则回调报错
         if (mCharacteristic == null
                 || (mCharacteristic.getProperties() & (BluetoothGattCharacteristic.PROPERTY_WRITE | BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) == 0) {
             if (bleWriteCallback != null)
                 bleWriteCallback.onWriteFailure(new OtherException("this characteristic not support write!"));
             return;
         }
-
+        //执行到此处说明可以向指定特征写入数据
+        //将待写入数据存入指定特征的mValue中
         if (mCharacteristic.setValue(data)) {
+            //
             handleCharacteristicWriteCallback(bleWriteCallback, uuid_write);
+            //调用SDK中的“写特征”函数，若失败，则回调报错
             if (!mBluetoothGatt.writeCharacteristic(mCharacteristic)) {
+                //在mHandler中移除MSG_CHA_WRITE_START消息(它用于发生超时后报错)
                 writeMsgInit();
                 if (bleWriteCallback != null)
                     bleWriteCallback.onWriteFailure(new OtherException("gatt writeCharacteristic fail"));
@@ -527,11 +535,15 @@ public class BleConnector {
     private void handleCharacteristicWriteCallback(BleWriteCallback bleWriteCallback,
                                                    String uuid_write) {
         if (bleWriteCallback != null) {
+            //在mHandler中移除MSG_CHA_WRITE_START消息(它用于发生超时后报错)
             writeMsgInit();
             bleWriteCallback.setKey(uuid_write);
             bleWriteCallback.setHandler(mHandler);
+            //将待写特征UUID，及对应的回调，存入bleWriteCallbackHashMap中
             mBleBluetooth.addWriteCallback(uuid_write, bleWriteCallback);
+            //延时指定的超时时间后发送消息。若该消息发送成功，说明发生了超时。
             mHandler.sendMessageDelayed(
+                    //生成一个消息(what=MSG_CHA_WRITE_START, obj=bleWriteCallback),延时指定的超时(5s)后发送此消息
                     mHandler.obtainMessage(BleMsg.MSG_CHA_WRITE_START, bleWriteCallback),
                     BleManager.getInstance().getOperateTimeout());
         }
@@ -546,8 +558,11 @@ public class BleConnector {
             readMsgInit();
             bleReadCallback.setKey(uuid_read);
             bleReadCallback.setHandler(mHandler);
+            //将待写特征UUID，及对应的回调，存入bleReadCallbackHashMap中
             mBleBluetooth.addReadCallback(uuid_read, bleReadCallback);
+            //延时指定的超时时间后发送消息。若该消息发送成功，说明发生了超时。
             mHandler.sendMessageDelayed(
+                    //生成一个消息(what=MSG_CHA_WRITE_START, obj=bleReadCallback),延时指定的超时(5s)后发送此消息
                     mHandler.obtainMessage(BleMsg.MSG_CHA_READ_START, bleReadCallback),
                     BleManager.getInstance().getOperateTimeout());
         }
