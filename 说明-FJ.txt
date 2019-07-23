@@ -1,0 +1,56 @@
+
+
+Android SDK for BLE
+
+与BLE扫描相关的API函数
+
+路径+文件名
+C:\Users\HS\AppData\Local\Android\Sdk\sources\android-28\android\bluetooth\BluetoothAdapter.java
+
+功能
+	启动扫描BLE设备
+函数名
+	public boolean startLeScan(LeScanCallback callback)
+入口
+	参数1 --- 扫描结果的回调函数
+返回
+	TRUE==启动扫描成功；FALSE==启动扫描失败
+说明
+	本函数内部实际将调用	
+
+
+功能
+	启动扫描BLE设备，要求广播数据中含有指定UUID的服务
+函数名
+	public boolean startLeScan(final UUID[] serviceUuids, final LeScanCallback callback)
+入口
+	参数1 --- 指定的服务UUID对象的数组。(每个UUID对象是个含有16字节的数组)
+	参数2 --- 扫描结果的回调函数
+返回
+	TRUE==启动扫描成功；FALSE==启动扫描失败	
+说明	
+	本函数内部将创建
+	C:\Users\HS\AppData\Local\Android\Sdk\sources\android-28\android\bluetooth\le\ScanCallback.java内的ScanCallback对象
+	ScanCallback scanCallback = new ScanCallback(){
+	//当扫描到一个BLE设备的广播后的回调
+	@Override
+	public void onScanResult(int callbackType, ScanResult result) {
+		......//执行一些处理，例如检测服务UUID是否符合指定值
+		//回调入口传入的回调，将扫描结果(设备名，RSSI值，扫描到的广播数据)传出
+		callback.onLeScan(result.getDevice(), result.getRssi(), scanRecord.getBytes());
+	}
+
+
+功能
+	停止扫描BLE设备
+函数名
+	public void stopLeScan(LeScanCallback callback)
+入口
+	参数1 --- 扫描结果的回调函数
+返回
+	无
+	
+	
+	
+
+
