@@ -2,20 +2,15 @@ package com.clj.blesample;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -42,6 +37,8 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.clj.blesample.adapter.DeviceAdapter;
 import com.clj.blesample.comm.ObserverManager;
 import com.clj.blesample.hex.hex;
@@ -54,11 +51,28 @@ import com.clj.fastble.callback.BleScanCallback;
 import com.clj.fastble.data.BleDevice;
 import com.clj.fastble.exception.BleException;
 import com.clj.fastble.scan.BleScanRuleConfig;
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.google.gson.Gson;
+import com.orhanobut.logger.AndroidLogAdapter;
+import com.orhanobut.logger.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+
+import es.dmoral.toasty.Toasty;
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 //Android的四大组件
 //Activity：它是所有Android程序的门面，凡是在应用中看得到的东西，都是放在Activity中的。
@@ -121,6 +135,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private LinearLayout layout_setting;
     private TextView txt_setting;
     private Button btn_scan;
+    private Button btn_lineChart;
     private TextView txt_timer;
     private EditText et_name, et_mac, et_uuid;
     private Switch sw_auto;
@@ -130,6 +145,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private DeviceAdapter mDeviceAdapter;
     private ProgressDialog progressDialog;
 
+
     private volatile boolean exitThread = false;
 
     private BleScanRuleConfig scanRuleConfig;
@@ -138,6 +154,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Long DeviceScanedTime;
     private Long ConnectStartedTime;
     private Long DeviceConnectedTime;
+
+    //json字符串-简单对象型
+    private static final String  JSON_OBJ_STR = "{\"studentName\":\"lily\",\"studentAge\":12}";
+
+    //json字符串-数组类型
+    private static final String  JSON_ARRAY_STR = "[{\"studentName\":\"lily\",\"studentAge\":12},{\"studentName\":\"lucy\",\"studentAge\":15}]";
+
+    //复杂格式json字符串
+    private static final String  COMPLEX_JSON_STR = "{\"teacherName\":\"crystall\",\"teacherAge\":27,\"course\":{\"courseName\":\"english\",\"code\":1270},\"students\":[{\"studentName\":\"lily\",\"studentAge\":12},{\"studentName\":\"lucy\",\"studentAge\":15}]}";
+
+
+    private final static String KEY = "mh8qnhsthxtzo3ql";
+
+    private final static String BASE_URL = "https://api.seniverse.com/v3/weather/";
+
 
     //静态代码块static{}(当类被JVM加载时执行且只执行一次)       --- Android无
     //无
@@ -198,10 +229,68 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onCreate(Bundle savedInstanceState) {
         //调用父类的构造函数
         super.onCreate(savedInstanceState);
+        Logger.addLogAdapter(new AndroidLogAdapter());
+        Logger.d("hello");
         //为本Activity引入布局
         setContentView(R.layout.activity_main);
         //初始化View
         initView();
+
+        String str = Thread.currentThread().getName();
+        Logger.d("当前线程名="+str);
+
+        //通过网络向指定网站请求当到天气的数据
+        Retrofit retrofit = new Retrofit.Builder()
+                .addConverterFactory(GsonConverterFactory.create())//解析方法
+                .baseUrl(BASE_URL)
+                .build();
+
+        IService weather = retrofit.create(IService.class);
+        Call<ResponseBody> call = weather.weatherInfo(KEY,"ip");
+
+        call.enqueue(new Callback<ResponseBody>() {
+
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if(response.isSuccessful()){
+                    try {
+                        String str = response.body().string();
+                        Gson gson =new Gson();
+                        WeatherBean wetherBean = gson.fromJson(str, WeatherBean.class);
+                        //String str = weatherBean.toString();
+//                        Log.d("fj","页面请求成功\n"
+//                                +response.body().getLocation().getCountry()
+//                                +response.body().getLocation().getName()
+//                                +response.body().getNow().getTemperature());
+                        Logger.d("当前线程名="+Thread.currentThread().getName());
+                        Logger.json(str);
+                        final String str1 = wetherBean.getResults().get(0).getLocation().getName()
+                                +":"+wetherBean.getResults().get(0).getNow().getTemperature();
+                        Logger.d(str1);
+                        Toasty.success(MainActivity.this, "当前天气："+str1, Toast.LENGTH_LONG).show();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    Log.d("fj","页面请求成功\n");
+
+                }
+                else{
+                    Logger.e("页面请求错误");
+                    MainActivity.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toasty.error(MainActivity.this, "天气请求错误").show();
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                Logger.e(t, "网络请求发生错误");
+            }
+        });
+
 
 //JAVA代码中经常看到对一个对象的连续.操作
 //实际上这种操作并非JAVA特有的操作，能否连续进行调用，还需要看该方法的返回值，
@@ -282,7 +371,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         BleManager.getInstance().destroy();
     }
 
+
+//=================================================================================
+//=================================================================================
     //本Activity上的按键按下后的回调，入口参数是View对象，即按下的具体是哪个按键
+//=================================================================================
+//=================================================================================
     @Override
     public void onClick(View v) {
         //根据入口传入的View对象获得它的ID，然后散转
@@ -291,6 +385,31 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.btn_scan:
                 //若当前按键上显示“开始扫描”，则先检测权限是否已开启
                 if (btn_scan.getText().equals(getString(R.string.start_scan))) {
+                    Toasty.success(MainActivity.this, "开始扫描", Toast.LENGTH_SHORT, true).show();
+                    //Json格式字符串 转 简单JSONObject
+                    //简单JSONObject 转 Json格式字符串
+                    //Logger输出Json格式字符串
+                    JSONObject jsonObject = JSONObject.parseObject(JSON_OBJ_STR);
+                    String jsonString = JSONObject.toJSONString(jsonObject);
+                    Logger.json(JSON_OBJ_STR);
+                    Logger.json(jsonString);
+                    //Json格式字符串的数组 转 JSONArray
+                    //JSONArray 转 Json格式字符串
+                    //Logger输出Json格式字符串
+                    JSONArray jsonArray = JSONArray.parseArray(JSON_ARRAY_STR);
+                    jsonString = JSONArray.toJSONString(jsonArray);
+                    Logger.json(JSON_ARRAY_STR);
+                    Logger.json(jsonString);
+                    //复杂Json格式字符串 转 复杂JSONObject
+                    //复杂JSONObject 转 Json格式字符串
+                    //Logger输出Json格式字符串
+                    jsonObject = JSONObject.parseObject(COMPLEX_JSON_STR);
+                    jsonString = JSONObject.toJSONString(jsonObject);
+                    Logger.json(COMPLEX_JSON_STR);
+                    Logger.json(jsonString);
+
+
+
                     checkPermissions();
                     exitThread = false;
                     //通过匿名类的方法创建一个新线程，并启动此线程
@@ -318,6 +437,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             }
                         }
                     }).start();
+
                 }
                 //若当前按键上显示“停止扫描”，则停止扫描
                 else if (btn_scan.getText().equals(getString(R.string.stop_scan))) {
@@ -337,6 +457,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     layout_setting.setVisibility(View.VISIBLE);
                     txt_setting.setText(getString(R.string.retrieve_search_settings));
                 }
+                break;
+
+            //是按下“折线图”
+            case R.id.btn_linechart:
+                //创建一个Intent类对象intent
+                //入口参数1（启动活动的上下文）= MainActivity.this
+                //入口参数2（想要启动的Activity）= AdvDataActivity.class
+                Intent intent = new Intent(MainActivity.this, LineChartActivity.class);
+                //向intent中存入一个键值对(类似JSON)：键=extra_data，值=deviceKey+"\n"+advdata
+                intent.putExtra("extra_data", "进入折线图");
+                //用预先设置好的intent来启动一个Activity
+                startActivity(intent);
+
                 break;
         }
     }
@@ -383,6 +516,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         //为此Button控件对象设置监听
         btn_scan.setOnClickListener(this);
 
+        //获取布局中自定义的Button控件btn_scan
+        btn_lineChart = (Button) findViewById(R.id.btn_linechart);
+        //设置此控件上显示的文本
+        btn_lineChart.setText(getString(R.string.line_chart));
+        //为此Button控件对象设置监听
+        btn_lineChart.setOnClickListener(this);
+
+
         //获取布局中自定义的TextView控件txt_timer
         txt_timer = (TextView) findViewById(R.id.txt_timer);
         //设置此控件上显示的文本
@@ -419,6 +560,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         //创建进度对话框对象，并用progressDialog来指向它
         progressDialog = new ProgressDialog(this);
+
+
+
 
 //匿名内部类：
 //它会隐式的继承一个类或者实现一个接口，也可以说，匿名内部类是一个继承了该类或者实现了该接口的“子类匿名对象”。
@@ -752,6 +896,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             //入口：scanResultList --- 扫描到的Ble设备列表
             @Override
             public void onScanFinished(List<BleDevice> scanResultList) {
+                Logger.w("scanResultList=",scanResultList.get(0).getDevice());
                 //令ImageView区域动画消失，并且不可见
                 img_loading.clearAnimation();
                 img_loading.setVisibility(View.INVISIBLE);
@@ -869,6 +1014,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             +gatt.getServices().get(3).getCharacteristics().get(i).getUuid().toString()
                             +"\n属性="+ property;
                     str += "\n描述符="+gatt.getServices().get(3).getCharacteristics().get(i).getDescriptors().toString();
+                    Logger.e("描述符=", gatt.getServices().get(3).getCharacteristics().get(i).getDescriptors());
                 }
 
                 //创建一个Intent类对象intent
@@ -942,6 +1088,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             //当设置完成
             @Override
             public void onMtuChanged(int mtu) {
+                BleManager.getInstance().setSplitWriteNum(mtu-3);//设置一包的字节数
                 Log.i(TAG, "onMtuChanged: " + mtu);
                 Toast.makeText(MainActivity.this, "设置MTU成功！MTU="+mtu, Toast.LENGTH_LONG).show();
             }

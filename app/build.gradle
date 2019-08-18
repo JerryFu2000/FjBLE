@@ -7,7 +7,7 @@ android {
     defaultConfig {
         applicationId "com.clj.blesample"
         minSdkVersion 14
-        targetSdkVersion 23
+        targetSdkVersion 26
         versionCode 233
         versionName "2.3.3"
     }
@@ -25,4 +25,18 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     implementation 'com.android.support:appcompat-v7:28.0.0'
     implementation project(':FastBleLib')
+
+    //https://github.com/GrenderG/Toasty
+    implementation 'com.github.GrenderG:Toasty:1.4.2'
+    //https://github.com/orhanobut/logger/
+    implementation 'com.orhanobut:logger:2.2.0'
+    //https://github.com/alibaba/fastjson
+    implementation 'com.alibaba:fastjson:1.1.70.android'
+    //https://github.com/square/retrofit
+    implementation 'com.squareup.retrofit2:retrofit:2.3.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.3.0'
+    //
+    implementation 'com.google.code.gson:gson:2.8.5'
+    //https://github.com/PhilJay/MPAndroidChart
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
 }
